@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../models/note_model.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../../providers/notes_provider.dart';
+import '../screens/note_details_screen.dart';
 
 class NoteCard extends StatelessWidget {
   final NoteModel note;
@@ -16,72 +18,153 @@ class NoteCard extends StatelessWidget {
     this.onReject,
   });
 
-  void _openNote() async {
-    final url = Uri.parse(note.contentUrl);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      debugPrint("Could not launch ${note.contentUrl}");
-    }
+  void _openNote(BuildContext context) async {
+    final provider = Provider.of<NotesProvider>(context, listen: false);
+    provider.addToRecents(note.id);
+    provider.incrementViewCount(note.id);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: note)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 2,
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: const Icon(Icons.picture_as_pdf, size: 40, color: Colors.redAccent),
-        title: Text(note.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(note.description ?? 'No description'),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Chip(
-                  label: Text(
-                    note.status.toUpperCase(),
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                  backgroundColor: note.status == 'approved'
-                      ? Colors.green.withOpacity(0.2)
-                      : Colors.orange.withOpacity(0.2),
-                ),
-                const SizedBox(width: 8),
-                if (note.category != null)
-                  Chip(
-                    label: Text(
-                      note.category!,
-                      style: const TextStyle(fontSize: 10),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ),
-        trailing: isTeacher && note.status == 'pending'
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
+    final provider = Provider.of<NotesProvider>(context);
+    final isFav = provider.isFavorite(note.id);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C222D),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF30363D)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _openNote(context),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.green),
-                    onPressed: onApprove,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00BFA5).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.picture_as_pdf, color: Color(0xFF00BFA5), size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                note.title,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                note.category ?? 'Uncategorized',
+                                style: const TextStyle(fontSize: 12, color: Color(0xFF8B949E)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          isFav ? Icons.favorite : Icons.favorite_border,
+                          color: isFav ? const Color(0xFF00BFA5) : const Color(0xFF8B949E),
+                          size: 20,
+                        ),
+                        onPressed: () => provider.toggleFavorite(note.id),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.red),
-                    onPressed: onReject,
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildMetric('Views', note.viewCount.toString()),
+                      _buildMetric('Status', note.status.toUpperCase(), color: _getStatusColor(note.status)),
+                      _buildMetric('Tags', note.tags.isEmpty ? 'None' : '#${note.tags[0]}'),
+                    ],
                   ),
+                  if (isTeacher && note.status == 'pending')
+                    Padding(
+                      padding: const EdgeInsets.only(top: 20),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: onApprove,
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00BFA5)),
+                              child: const Text('Approve', style: TextStyle(color: Colors.black)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: onReject,
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.redAccent),
+                                foregroundColor: Colors.redAccent,
+                              ),
+                              child: const Text('Reject'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
-              )
-            : IconButton(
-                icon: const Icon(Icons.open_in_new),
-                onPressed: _openNote,
               ),
+            ),
+          ),
+        ),
       ),
     );
+  }
+
+  Widget _buildMetric(String label, String value, {Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFF8B949E))),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: color ?? Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'approved': return const Color(0xFF00BFA5);
+      case 'pending': return Colors.orangeAccent;
+      case 'rejected': return Colors.redAccent;
+      default: return Colors.white;
+    }
   }
 }

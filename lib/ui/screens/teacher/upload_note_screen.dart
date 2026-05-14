@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart' as fp;
 import '../../../providers/notes_provider.dart';
-import '../../../providers/auth_provider.dart';
 
 class UploadNoteScreen extends StatefulWidget {
   const UploadNoteScreen({super.key});
@@ -15,38 +14,60 @@ class _UploadNoteScreenState extends State<UploadNoteScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _categoryController = TextEditingController();
+  final _tagController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  final List<String> _tags = [];
+  bool _isShared = false;
   String? _selectedFilePath;
   String? _selectedFileName;
 
-  void _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'png', 'jpg'],
-    );
-
-    if (result != null) {
+  void _addTag() {
+    if (_tagController.text.isNotEmpty) {
       setState(() {
-        _selectedFilePath = result.files.single.path;
-        _selectedFileName = result.files.single.name;
+        _tags.add(_tagController.text.trim());
+        _tagController.clear();
       });
     }
   }
 
+  void _pickFile() async {
+    try {
+      // Using dynamic to bypass analyzer discrepancy in this environment
+      final result = await (fp.FilePicker as dynamic).platform.pickFiles(
+        type: fp.FileType.custom,
+        allowedExtensions: ['pdf', 'docx', 'png', 'jpg'],
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          _selectedFilePath = result.files.single.path;
+          _selectedFileName = result.files.single.name;
+        });
+      }
+    } catch (e) {
+      debugPrint("File picker error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking file: $e')),
+        );
+      }
+    }
+  }
+
   void _upload() async {
-    if (_formKey.currentState!.validate() && _selectedFilePath != null) {
+    if (_formKey.currentState!.validate() && _selectedFileName != null) {
       final notesProvider = Provider.of<NotesProvider>(context, listen: false);
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
       try {
         await notesProvider.uploadNote(
           title: _titleController.text,
           description: _descController.text,
           category: _categoryController.text,
-          filePath: _selectedFilePath!,
+          tags: _tags,
+          isShared: _isShared,
+          filePath: _selectedFilePath ?? '',
           fileName: _selectedFileName!,
-          authorId: authProvider.currentUser!.id,
         );
         if (!mounted) return;
         Navigator.pop(context);
@@ -59,9 +80,9 @@ class _UploadNoteScreenState extends State<UploadNoteScreen> {
           SnackBar(content: Text('Upload failed: $e')),
         );
       }
-    } else if (_selectedFilePath == null) {
+    } else if (_selectedFileName == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a file to upload')),
+        const SnackBar(content: Text('Please attach a file first')),
       );
     }
   }
@@ -73,7 +94,7 @@ class _UploadNoteScreenState extends State<UploadNoteScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Upload Note')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: Column(
@@ -88,29 +109,66 @@ class _UploadNoteScreenState extends State<UploadNoteScreen> {
               TextFormField(
                 controller: _descController,
                 decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                maxLines: 3,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _categoryController,
-                decoration: const InputDecoration(labelText: 'Category (e.g. Math, Science)', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Category (Math, Science, etc.)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _tagController,
+                      decoration: const InputDecoration(labelText: 'Add Tag', border: OutlineInputBorder()),
+                      onFieldSubmitted: (_) => _addTag(),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _addTag,
+                    icon: const Icon(Icons.add_circle, size: 32, color: Color(0xFF00BFA5)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: _tags.map((tag) => Chip(
+                  label: Text(tag),
+                  onDeleted: () => setState(() => _tags.remove(tag)),
+                )).toList(),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: const Text('Share with entire school?'),
+                subtitle: const Text('Makes the note visible in the Shared section once approved.'),
+                value: _isShared,
+                onChanged: (val) => setState(() => _isShared = val),
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
                 onPressed: _pickFile,
-                icon: const Icon(Icons.attach_file),
-                label: Text(_selectedFileName ?? 'Select File (PDF/Image)'),
+                icon: const Icon(Icons.attach_file, color: Colors.black),
+                label: Text(_selectedFileName ?? 'Attach PDF or DOCX', style: const TextStyle(color: Colors.black)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedFileName != null ? Colors.green : null,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: _selectedFileName != null ? Colors.green.shade50 : const Color(0xFF1C222D),
+                  side: const BorderSide(color: Color(0xFF30363D)),
                 ),
               ),
-              const SizedBox(height: 32),
-              if (isLoading)
-                const Center(child: CircularProgressIndicator())
-              else
-                ElevatedButton(
-                  onPressed: _upload,
-                  child: const Text('Upload Note', style: TextStyle(fontSize: 18)),
-                ),
+              const SizedBox(height: 40),
+              isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF00BFA5)))
+                : ElevatedButton(
+                    onPressed: _upload,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      backgroundColor: const Color(0xFF00BFA5),
+                    ),
+                    child: const Text('Upload Note', style: TextStyle(fontSize: 18, color: Colors.black, fontWeight: FontWeight.bold)),
+                  ),
             ],
           ),
         ),

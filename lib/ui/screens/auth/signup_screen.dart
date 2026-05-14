@@ -27,7 +27,7 @@ class _SignupScreenState extends State<SignupScreen> {
           _selectedRole,
         );
         if (!mounted) return;
-        Navigator.pop(context); // Go back to wrapper which will show dashboard
+        Navigator.pop(context);
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,35 +83,30 @@ class _SignupScreenState extends State<SignupScreen> {
                   validator: (value) => value!.length < 6 ? 'Password must be at least 6 characters' : null,
                 ),
                 const SizedBox(height: 24),
-                const Text('I am a:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('Student'),
-                        value: 'student',
-                        groupValue: _selectedRole,
-                        onChanged: (value) => setState(() => _selectedRole = value!),
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<String>(
-                        title: const Text('Teacher'),
-                        value: 'teacher',
-                        groupValue: _selectedRole,
-                        onChanged: (value) => setState(() => _selectedRole = value!),
-                      ),
-                    ),
+                const Text('Choose Your Role:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedRole,
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                  items: const [
+                    DropdownMenuItem(value: 'student', child: Text('Student')),
+                    DropdownMenuItem(value: 'teacher', child: Text('Teacher')),
+                    DropdownMenuItem(value: 'admin', child: Text('Administrator')),
                   ],
+                  onChanged: (val) => setState(() => _selectedRole = val!),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 if (isLoading)
                   const Center(child: CircularProgressIndicator())
                 else
                   ElevatedButton(
                     onPressed: _signup,
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                    child: const Text('Sign Up', style: TextStyle(fontSize: 18)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: const Color(0xFF00BFA5),
+                      foregroundColor: Colors.black,
+                    ),
+                    child: const Text('Sign Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ),
               ],
             ),

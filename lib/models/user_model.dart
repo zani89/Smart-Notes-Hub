@@ -3,15 +3,19 @@ class UserModel {
   final String name;
   final String email;
   final String role;
-  final DateTime createdAt;
+  final String? semester;
 
   UserModel({
     required this.id,
     required this.name,
     required this.email,
     required this.role,
-    required this.createdAt,
+    this.semester,
   });
+
+  bool get isAdmin => role == 'admin';
+  bool get isTeacher => role == 'teacher';
+  bool get isStudent => role == 'student';
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
@@ -19,7 +23,7 @@ class UserModel {
       name: json['name'],
       email: json['email'],
       role: json['role'] ?? 'student',
-      createdAt: DateTime.parse(json['created_at']),
+      semester: json['semester'],
     );
   }
 
@@ -29,10 +33,7 @@ class UserModel {
       'name': name,
       'email': email,
       'role': role,
-      'created_at': createdAt.toIso8601String(),
+      'semester': semester,
     };
   }
-
-  bool get isTeacher => role == 'teacher';
-  bool get isStudent => role == 'student';
 }

@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notes_provider.dart';
+import 'providers/university_provider.dart';
 import 'ui/screens/auth/auth_wrapper.dart';
 
 void main() async {
@@ -15,11 +16,10 @@ void main() async {
   // Initialize Hive
   await Hive.initFlutter();
   await Hive.openBox('notesBox'); // Box for offline caching
+  await Hive.openBox('prefsBox'); // Box for favorites and recents
   
   // Initialize Supabase
   try {
-    // If the placeholders are used, this will throw an exception but we will catch it
-    // so the app still runs for UI building purposes.
     if (SupabaseConstants.supabaseUrl != 'YOUR_SUPABASE_URL') {
       await Supabase.initialize(
         url: SupabaseConstants.supabaseUrl,
@@ -36,6 +36,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => NotesProvider()),
+        ChangeNotifierProvider(create: (_) => UniversityProvider()),
       ],
       child: const SmartNotesApp(),
     ),
