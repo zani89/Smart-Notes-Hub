@@ -1,69 +1,67 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import 'profile_screen.dart';
 
-class SettingsScreen extends StatefulWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushNotifications = true;
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final user = authProvider.currentUser;
+    final authState = ref.watch(authProvider);
+    final themeMode = ref.watch(themeProvider);
+    final user = authState.user;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      backgroundColor: const Color(0xFF0B0E11),
+      appBar: AppBar(title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Text('Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF00BFA5))),
           const SizedBox(height: 10),
           ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.person)),
-            title: Text(user?.name ?? 'User Name'),
-            subtitle: Text(user?.email ?? 'Email'),
-            trailing: IconButton(icon: const Icon(Icons.edit), onPressed: () {}),
+            leading: const Icon(Icons.person, color: Colors.white70),
+            title: const Text('View Profile', style: TextStyle(color: Colors.white)),
+            trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
           ),
-          ListTile(
-            leading: const Icon(Icons.badge),
-            title: const Text('Role'),
-            trailing: Text(user?.role.toUpperCase() ?? 'STUDENT', style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          const Divider(),
-          const Text('Preferences', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+          const Divider(color: Color(0xFF30363D)),
+          const Text('Preferences', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF00BFA5))),
           SwitchListTile(
-            secondary: const Icon(Icons.dark_mode),
-            title: const Text('Dark Mode'),
-            value: themeProvider.isDarkMode,
-            onChanged: (val) => themeProvider.toggleTheme(val),
+            secondary: const Icon(Icons.dark_mode, color: Colors.white70),
+            title: const Text('Dark Mode', style: TextStyle(color: Colors.white)),
+            value: themeMode == ThemeMode.dark,
+            onChanged: (val) => ref.read(themeProvider.notifier).toggleTheme(val),
           ),
           SwitchListTile(
-            secondary: const Icon(Icons.notifications),
-            title: const Text('Push Notifications'),
+            secondary: const Icon(Icons.notifications, color: Colors.white70),
+            title: const Text('Push Notifications', style: TextStyle(color: Colors.white)),
             value: _pushNotifications,
             onChanged: (val) => setState(() => _pushNotifications = val),
           ),
-          const Divider(),
-          const Text('Account', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.red)),
+          const Divider(color: Color(0xFF30363D)),
+          const Text('Account', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
           ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
             onTap: () {
-              authProvider.signOut();
+              ref.read(authProvider.notifier).signOut();
               Navigator.pop(context);
             },
-          ),
-          const ListTile(
-            leading: Icon(Icons.delete_forever, color: Colors.grey),
-            title: Text('Delete Account', style: TextStyle(color: Colors.grey)),
           ),
         ],
       ),

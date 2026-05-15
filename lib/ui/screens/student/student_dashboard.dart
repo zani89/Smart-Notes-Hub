@@ -1,148 +1,208 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/notes_provider.dart';
-import '../../../providers/university_provider.dart';
+import '../../../providers/assignments_provider.dart';
 import '../../widgets/note_card.dart';
+import '../../widgets/glass_container.dart';
 import '../settings_screen.dart';
-import '../teacher/upload_note_screen.dart';
+import 'workspace_screen.dart';
+import 'collaboratory_screen.dart';
+import 'flashcards_screen.dart';
+import 'assignments_screen.dart';
 
-class StudentDashboard extends StatefulWidget {
+class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({super.key});
 
   @override
-  State<StudentDashboard> createState() => _StudentDashboardState();
+  ConsumerState<StudentDashboard> createState() => _StudentDashboardState();
 }
 
-class _StudentDashboardState extends State<StudentDashboard> {
+class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   int _selectedIndex = 0;
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final notesProvider = Provider.of<NotesProvider>(context);
-    final uniProvider = Provider.of<UniversityProvider>(context);
+    final authState = ref.watch(authProvider);
+    final notesState = ref.watch(notesProvider);
+    final assignState = ref.watch(assignmentsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 80,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Hi, ${authProvider.currentUser?.name ?? "Student"} (${authProvider.currentUser?.semester ?? "Sem unknown"})',
-              style: const TextStyle(fontSize: 14, color: Color(0xFF8B949E)),
+      body: Stack(
+        children: [
+          // Background Glows
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF00BFA5).withValues(alpha: 0.1),
+              ),
             ),
-            const Text('Smart Notes Hub', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Color(0xFF00BFA5)),
-            onPressed: () => _showNotifications(context, uniProvider),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Color(0xFF8B949E)),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          
+          SafeArea(
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: [
+                _buildHome(authState, notesState, assignState.pendingAssignments.length),
+                const WorkspaceScreen(),
+                const CollaboratoryScreen(),
+                const FlashcardsScreen(),
+                const AssignmentsScreen(),
+                _buildProfile(authState),
+              ],
+            ),
           ),
         ],
       ),
-      body: Column(
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildHome(AuthState auth, NotesState notes, int pendingTasksCount) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_selectedIndex == 0) _buildSearchBar(notesProvider),
-          Expanded(
-            child: _buildBody(notesProvider, uniProvider),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Good Morning,', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                  Text(auth.user?.name ?? 'Scholar', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              CircleAvatar(
+                radius: 25,
+                backgroundColor: const Color(0xFF00BFA5).withValues(alpha: 0.2),
+                child: Icon(Icons.person_outline, color: const Color(0xFF00BFA5)),
+              ),
+            ],
           ),
-        ],
-      ),
-      floatingActionButton: _selectedIndex == 0 ? FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadNoteScreen())),
-        label: const Text('Contribute', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-        icon: const Icon(Icons.upload_file, color: Colors.black),
-        backgroundColor: const Color(0xFF00BFA5),
-      ) : null,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.book), label: 'Hub'),
-          BottomNavigationBarItem(icon: Icon(Icons.event), label: 'Events'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite), label: 'Favs'),
-          BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Shared'),
+          const SizedBox(height: 30),
+          _buildFocusStats(notes, pendingTasksCount),
+          const SizedBox(height: 30),
+          const Text('Recent Notes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 16),
+          ...notes.notes.take(3).map((n) => NoteCard(note: n)),
         ],
       ),
     );
   }
 
-  Widget _buildSearchBar(NotesProvider provider) {
+  Widget _buildFocusStats(NotesState notesState, int pendingTasksCount) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C222D),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF00BFA5).withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF00BFA5).withValues(alpha: 0.1), blurRadius: 20, spreadRadius: 2),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _statItem('Focus', '2.5h', Icons.timer_outlined),
+          _statItem('Notes', notesState.notes.length.toString(), Icons.description_outlined),
+          _statItem('Tasks', pendingTasksCount.toString(), Icons.check_circle_outline),
+        ],
+      ),
+    );
+  }
+
+  Widget _statItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: const Color(0xFF00BFA5), size: 24),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.white54)),
+      ],
+    );
+  }
+
+  Widget _buildProfile(AuthState auth) {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: TextField(
-        controller: _searchController,
-        onChanged: (val) => provider.setSearchQuery(val),
-        decoration: InputDecoration(
-          hintText: 'Search semester, course, tags...',
-          prefixIcon: const Icon(Icons.search),
-          filled: true,
-          fillColor: const Color(0xFF1C222D),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const Text('Profile & Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+          const SizedBox(height: 30),
+          ListTile(
+            leading: const Icon(Icons.settings_outlined, color: Colors.white70),
+            title: const Text('Settings'),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())),
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.redAccent),
+            title: const Text('Logout'),
+            onTap: () => ref.read(authProvider.notifier).signOut(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      padding: const EdgeInsets.only(bottom: 20, left: 20, right: 20, top: 10),
+      color: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ColorFilter.mode(Colors.white.withValues(alpha: 0.05), BlendMode.srcOver),
+          child: Container(
+            height: 70,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItem(0, Icons.grid_view_rounded, 'Home'),
+                _navItem(1, Icons.folder_copy_outlined, 'Files'),
+                _navItem(2, Icons.group_work_outlined, 'Co-lab'),
+                _navItem(3, Icons.style_outlined, 'Cards'),
+                _navItem(4, Icons.assignment_outlined, 'Tasks'),
+                _navItem(5, Icons.person_outline, 'User'),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(NotesProvider notes, UniversityProvider uni) {
-    switch (_selectedIndex) {
-      case 0: return _buildNotesList(notes.approvedNotes, notes);
-      case 1: return _buildEventsList(uni);
-      case 2: return _buildNotesList(notes.favoriteNotes, notes);
-      case 3: return _buildNotesList(notes.sharedNotes, notes);
-      default: return const Center(child: Text('Coming Soon'));
-    }
-  }
-
-  Widget _buildNotesList(List notes, NotesProvider provider) {
-    if (notes.isEmpty) return const Center(child: Text('No notes found.'));
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: notes.length,
-      itemBuilder: (context, index) => NoteCard(note: notes[index]),
-    );
-  }
-
-  Widget _buildEventsList(UniversityProvider provider) {
-    if (provider.events.isEmpty) return const Center(child: Text('No upcoming events.'));
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: provider.events.length,
-      itemBuilder: (context, index) {
-        final event = provider.events[index];
-        return Card(
-          child: ListTile(
-            leading: const Icon(Icons.event_available, color: Colors.blue),
-            title: Text(event.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('${event.description}\n@ ${event.location}'),
-            isThreeLine: true,
-          ),
-        );
-      },
-    );
-  }
-
-  void _showNotifications(BuildContext context, UniversityProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => ListView(
-        padding: const EdgeInsets.all(16),
+  Widget _navItem(int index, IconData icon, String label) {
+    final isSelected = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = index),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('University Announcements', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          ...provider.notifications.map((n) => ListTile(
-            leading: const Icon(Icons.campaign, color: Colors.orange),
-            title: Text(n.title),
-            subtitle: Text(n.message),
-          )),
+          Icon(
+            icon,
+            color: isSelected ? const Color(0xFF00BFA5) : Colors.white38,
+            size: isSelected ? 28 : 24,
+          ),
+          if (isSelected)
+            Container(
+              margin: const EdgeInsets.only(top: 4),
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00BFA5)),
+            ),
         ],
       ),
     );

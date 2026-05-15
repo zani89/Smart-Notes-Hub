@@ -18,8 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
+    uni_id TEXT UNIQUE NOT NULL,
     role user_role DEFAULT 'student',
-    semester TEXT, -- For students
+    semester TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -106,6 +107,12 @@ ALTER TABLE contribution_requests ENABLE ROW LEVEL SECURITY;
 -- Users can read their own profile
 CREATE POLICY "Users can view own profile" ON users FOR SELECT USING (auth.uid() = id);
 
+-- Users can insert their own profile during signup
+CREATE POLICY "Users can insert own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Users can update their own profile
+CREATE POLICY "Users can update own profile" ON users FOR UPDATE USING (auth.uid() = id);
+
 -- Admin can manage everything
 CREATE POLICY "Admin can do anything" ON users FOR ALL USING (
     (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
@@ -130,22 +137,21 @@ CREATE POLICY "Admins/Teachers can post events" ON events FOR INSERT WITH CHECK 
 INSERT INTO storage.buckets (id, name, public) VALUES ('notes_files', 'notes_files', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('submissions', 'submissions', true) ON CONFLICT (id) DO NOTHING;
 
--- Trigger for profile creation
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-    INSERT INTO public.users (id, name, email, role)
-    VALUES (
-        new.id,
-        new.raw_user_meta_data->>'name',
-        new.email,
-        COALESCE((new.raw_user_meta_data->>'role')::user_role, 'student')
-    );
-    RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
+-- Trigger for profile creation (REMOVED: Handle insert from Flutter client instead)
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-    AFTER INSERT ON auth.users
-    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+-- 5. Storage Policies
+-- Allow anyone to read from notes_files (since it's public, but good to be explicit)
+CREATE POLICY "Public Access" ON storage.objects FOR SELECT USING (bucket_id = 'notes_files');
+
+-- Allow authenticated users to upload to notes_files
+CREATE POLICY "Authenticated users can upload notes" ON storage.objects FOR INSERT WITH CHECK (
+    bucket_id = 'notes_files' AND auth.role() = 'authenticated'
+);
+
+-- Allow authors to delete their own notes from storage
+CREATE POLICY "Authors can delete own notes" ON storage.objects FOR DELETE USING (
+    bucket_id = 'notes_files' AND auth.uid() = owner
+);
+

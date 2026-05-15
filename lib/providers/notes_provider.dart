@@ -1,125 +1,147 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/note_model.dart';
 
-class NotesProvider extends ChangeNotifier {
-  final SupabaseClient _supabase = Supabase.instance.client;
-  final Box _notesBox = Hive.box('notesBox');
-  final Box _prefsBox = Hive.box('prefsBox');
+final notesProvider = StateNotifierProvider<NotesNotifier, NotesState>((ref) {
+  return NotesNotifier();
+});
 
-  List<NoteModel> _notes = [];
-  bool _isLoading = false;
-  String _searchQuery = '';
-  String? _selectedCategory;
+class NotesState {
+  final List<NoteModel> notes;
+  final List<String> favorites;
+  final List<String> recents;
+  final bool isLoading;
+  final String searchQuery;
+  final String? selectedCategory;
+  final String? selectedSemester;
 
-  List<NoteModel> get notes => _notes;
-  bool get isLoading => _isLoading;
+  NotesState({
+    this.notes = const [],
+    this.favorites = const [],
+    this.recents = const [],
+    this.isLoading = false,
+    this.searchQuery = '',
+    this.selectedCategory,
+    this.selectedSemester,
+  });
 
-  NotesProvider() {
-    _loadFromCache();
-    _fetchFromSupabase();
-    _subscribeToRealtime();
-  }
-
-  void _loadFromCache() {
-    final cached = _notesBox.get('all_notes');
-    if (cached != null) {
-      final List<dynamic> decoded = jsonDecode(cached);
-      _notes = decoded.map((e) => NoteModel.fromJson(e)).toList();
-      notifyListeners();
-    }
-  }
-
-  Future<void> _fetchFromSupabase() async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final data = await _supabase.from('notes').select('*, users(name)').order('created_at', ascending: false);
-      _notes = (data as List<dynamic>).map((e) => NoteModel.fromJson(e)).toList();
-      _notesBox.put('all_notes', jsonEncode(data));
-    } catch (e) {
-      debugPrint('Error fetching notes: $e');
-    }
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  void _subscribeToRealtime() {
-    _supabase.from('notes').stream(primaryKey: ['id']).listen((data) async {
-      await _fetchFromSupabase();
-    });
-  }
-
-  // --- Search & Filter ---
-
-  void setSearchQuery(String query) {
-    _searchQuery = query.toLowerCase();
-    notifyListeners();
-  }
-
-  void setCategory(String? category) {
-    _selectedCategory = category;
-    notifyListeners();
+  NotesState copyWith({
+    List<NoteModel>? notes,
+    List<String>? favorites,
+    List<String>? recents,
+    bool? isLoading,
+    String? searchQuery,
+    String? selectedCategory,
+    String? selectedSemester,
+  }) {
+    return NotesState(
+      notes: notes ?? this.notes,
+      favorites: favorites ?? this.favorites,
+      recents: recents ?? this.recents,
+      isLoading: isLoading ?? this.isLoading,
+      searchQuery: searchQuery ?? this.searchQuery,
+      selectedCategory: selectedCategory ?? this.selectedCategory,
+      selectedSemester: selectedSemester ?? this.selectedSemester,
+    );
   }
 
   List<NoteModel> get filteredNotes {
-    return _notes.where((note) {
-      final matchesSearch = note.title.toLowerCase().contains(_searchQuery) ||
-          (note.description?.toLowerCase().contains(_searchQuery) ?? false) ||
-          note.tags.any((t) => t.toLowerCase().contains(_searchQuery));
-      final matchesCategory = _selectedCategory == null || note.category == _selectedCategory;
-      return matchesSearch && matchesCategory;
+    return notes.where((note) {
+      final matchesSearch = note.title.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          (note.description?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
+          (note.semester?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false) ||
+          note.tags.any((t) => t.toLowerCase().contains(searchQuery.toLowerCase()));
+      final matchesCategory = selectedCategory == null || note.category == selectedCategory;
+      final matchesSemester = selectedSemester == null || note.semester == selectedSemester;
+      return matchesSearch && matchesCategory && matchesSemester;
     }).toList();
   }
 
-  List<NoteModel> get approvedNotes => filteredNotes.where((n) => n.status == 'approved').toList();
-  List<NoteModel> get pendingNotes => _notes.where((n) => n.status == 'pending').toList();
-  List<NoteModel> get sharedNotes => filteredNotes.where((n) => n.isShared).toList();
+  bool isFavorite(String noteId) => favorites.contains(noteId);
+}
 
-  // --- Favorites & Recents ---
+class NotesNotifier extends StateNotifier<NotesState> {
+  final SupabaseClient _supabase = Supabase.instance.client;
+  late final Box<NoteModel> _notesBox;
 
-  List<NoteModel> get favoriteNotes {
-    final List<String> favIds = List<String>.from(_prefsBox.get('favorites', defaultValue: <String>[]));
-    return _notes.where((n) => favIds.contains(n.id)).toList();
+  NotesNotifier() : super(NotesState()) {
+    _notesBox = Hive.box<NoteModel>('notesBox');
+    _init();
   }
 
-  bool isFavorite(String noteId) {
-    final List<String> favIds = List<String>.from(_prefsBox.get('favorites', defaultValue: <String>[]));
-    return favIds.contains(noteId);
+  Future<void> _init() async {
+    await _loadFromLocal();
+    await fetchNotes();
+    _subscribeToRealtime();
+  }
+
+  Future<void> _loadFromLocal() async {
+    final localNotes = _notesBox.values.toList();
+    // Sort by createdAt descending
+    localNotes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    state = state.copyWith(notes: localNotes);
+  }
+
+  Future<void> fetchNotes() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final data = await _supabase.from('notes').select('*, users!notes_author_id_fkey(name)').order('created_at', ascending: false);
+      final fetchedNotes = (data as List<dynamic>).map((e) => NoteModel.fromJson(e)).toList();
+      
+      state = state.copyWith(notes: fetchedNotes, isLoading: false);
+      
+      // Sync to Hive
+      await _notesBox.clear();
+      await _notesBox.addAll(fetchedNotes);
+    } catch (e) {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  void _subscribeToRealtime() {
+    _supabase.from('notes').stream(primaryKey: ['id']).listen((data) {
+      fetchNotes();
+    });
+  }
+
+  void setSearchQuery(String query) {
+    state = state.copyWith(searchQuery: query);
+  }
+
+  void setCategory(String? category) {
+    state = state.copyWith(selectedCategory: category);
+  }
+
+  void setSemester(String? semester) {
+    state = state.copyWith(selectedSemester: semester);
   }
 
   void toggleFavorite(String noteId) {
-    final List<String> favIds = List<String>.from(_prefsBox.get('favorites', defaultValue: <String>[]));
-    if (favIds.contains(noteId)) {
-      favIds.remove(noteId);
+    final newFavs = List<String>.from(state.favorites);
+    if (newFavs.contains(noteId)) {
+      newFavs.remove(noteId);
     } else {
-      favIds.add(noteId);
+      newFavs.add(noteId);
     }
-    _prefsBox.put('favorites', favIds);
-    notifyListeners();
+    state = state.copyWith(favorites: newFavs);
   }
 
   void addToRecents(String noteId) {
-    final List<String> recentIds = List<String>.from(_prefsBox.get('recents', defaultValue: <String>[]));
-    recentIds.remove(noteId);
-    recentIds.insert(0, noteId);
-    if (recentIds.length > 10) recentIds.removeLast();
-    _prefsBox.put('recents', recentIds);
-    notifyListeners();
+    final newRecents = List<String>.from(state.recents);
+    newRecents.remove(noteId);
+    newRecents.insert(0, noteId);
+    if (newRecents.length > 10) newRecents.removeLast();
+    state = state.copyWith(recents: newRecents);
   }
 
-  // --- Actions ---
-
-  Future<void> updateNoteStatus(String noteId, String status) async {
+  Future<void> incrementViewCount(String noteId) async {
     try {
-      await _supabase.from('notes').update({'status': status}).eq('id', noteId);
-      await _fetchFromSupabase();
+      final note = state.notes.firstWhere((n) => n.id == noteId);
+      await _supabase.from('notes').update({'view_count': note.viewCount + 1}).eq('id', noteId);
     } catch (e) {
-      debugPrint('Error updating status: $e');
+      // Ignore
     }
   }
 
@@ -131,14 +153,20 @@ class NotesProvider extends ChangeNotifier {
     required String filePath,
     required String fileName,
     required bool isShared,
+    String? semester,
   }) async {
+    state = state.copyWith(isLoading: true);
     try {
-      _isLoading = true;
-      notifyListeners();
-
-      // In a real app, you would upload the file here
-      // This is a simulation using a dummy URL for the demo
+      final file = File(filePath);
+      final bytes = await file.readAsBytes();
       final storagePath = 'notes/${DateTime.now().millisecondsSinceEpoch}_$fileName';
+      
+      await _supabase.storage.from('notes_files').uploadBinary(
+        storagePath,
+        bytes,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
       final fileUrl = _supabase.storage.from('notes_files').getPublicUrl(storagePath);
 
       await _supabase.from('notes').insert({
@@ -150,40 +178,17 @@ class NotesProvider extends ChangeNotifier {
         'is_shared': isShared,
         'author_id': _supabase.auth.currentUser!.id,
         'status': 'pending',
+        'semester': semester,
       });
 
-      await _fetchFromSupabase();
-    } catch (e) {
-      debugPrint('Upload error: $e');
-      rethrow;
+      await fetchNotes();
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(isLoading: false);
     }
   }
 
-  Future<void> incrementViewCount(String noteId) async {
-    try {
-      final note = _notes.firstWhere((n) => n.id == noteId);
-      await _supabase.from('notes').update({'view_count': note.viewCount + 1}).eq('id', noteId);
-    } catch (e) {
-      debugPrint('Error incrementing view: $e');
-    }
-  }
-
-  // --- Analytics ---
-
-  Map<String, dynamic> getAnalytics() {
-    if (_notes.isEmpty) return {'total': 0, 'approved': 0, 'pending': 0, 'rate': '0%'};
-    final total = _notes.length;
-    final approved = _notes.where((n) => n.status == 'approved').length;
-    final pending = _notes.where((n) => n.status == 'pending').length;
-    final rate = '${((approved / total) * 100).toStringAsFixed(1)}%';
-    return {
-      'total': total,
-      'approved': approved,
-      'pending': pending,
-      'rate': rate,
-    };
+  Future<void> updateNoteStatus(String noteId, String status) async {
+    await _supabase.from('notes').update({'status': status}).eq('id', noteId);
+    await fetchNotes();
   }
 }

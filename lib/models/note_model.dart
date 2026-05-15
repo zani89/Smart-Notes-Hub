@@ -1,15 +1,34 @@
-class NoteModel {
+import 'package:hive/hive.dart';
+
+part 'note_model.g.dart';
+
+@HiveType(typeId: 0)
+class NoteModel extends HiveObject {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String title;
+  @HiveField(2)
   final String? description;
+  @HiveField(3)
   final String contentUrl;
+  @HiveField(4)
   final String? category;
+  @HiveField(5)
   final List<String> tags;
+  @HiveField(6)
   final bool isShared;
+  @HiveField(7)
   final int viewCount;
+  @HiveField(8)
   final String authorId;
-  final String authorName; // Added author name
+  @HiveField(9)
+  final String authorName;
+  @HiveField(10)
   final String status;
+  @HiveField(11)
+  final String? semester;
+  @HiveField(12)
   final DateTime createdAt;
 
   NoteModel({
@@ -24,6 +43,7 @@ class NoteModel {
     required this.authorId,
     required this.authorName,
     required this.status,
+    this.semester,
     required this.createdAt,
   });
 
@@ -32,7 +52,7 @@ class NoteModel {
       id: json['id'],
       title: json['title'],
       description: json['description'],
-      contentUrl: json['content_url'],
+      contentUrl: json['content_url'] ?? '',
       category: json['category'],
       tags: List<String>.from(json['tags'] ?? []),
       isShared: json['is_shared'] ?? false,
@@ -40,6 +60,7 @@ class NoteModel {
       authorId: json['author_id'],
       authorName: json['users'] != null ? json['users']['name'] : 'Unknown Author',
       status: json['status'] ?? 'pending',
+      semester: json['semester'],
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -55,7 +76,9 @@ class NoteModel {
       'is_shared': isShared,
       'view_count': viewCount,
       'author_id': authorId,
+      'author_name': authorName,
       'status': status,
+      'semester': semester,
       'created_at': createdAt.toIso8601String(),
     };
   }

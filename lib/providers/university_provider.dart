@@ -1,50 +1,65 @@
-import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/university_models.dart';
 
-class UniversityProvider extends ChangeNotifier {
+final universityProvider = StateNotifierProvider<UniversityNotifier, UniversityState>((ref) {
+  return UniversityNotifier();
+});
+
+class UniversityState {
+  final List<EventModel> events;
+  final List<NotificationModel> notifications;
+  final List<ContributionRequestModel> contributionRequests;
+  final bool isLoading;
+
+  UniversityState({
+    this.events = const [],
+    this.notifications = const [],
+    this.contributionRequests = const [],
+    this.isLoading = false,
+  });
+
+  UniversityState copyWith({
+    List<EventModel>? events,
+    List<NotificationModel>? notifications,
+    List<ContributionRequestModel>? contributionRequests,
+    bool? isLoading,
+  }) {
+    return UniversityState(
+      events: events ?? this.events,
+      notifications: notifications ?? this.notifications,
+      contributionRequests: contributionRequests ?? this.contributionRequests,
+      isLoading: isLoading ?? this.isLoading,
+    );
+  }
+}
+
+class UniversityNotifier extends StateNotifier<UniversityState> {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  List<EventModel> _events = [];
-  List<NotificationModel> _notifications = [];
-  List<ContributionRequestModel> _contributionRequests = [];
-  bool _isLoading = false;
-
-  List<EventModel> get events => _events;
-  List<NotificationModel> get notifications => _notifications;
-  List<ContributionRequestModel> get contributionRequests => _contributionRequests;
-  bool get isLoading => _isLoading;
-
-  UniversityProvider() {
+  UniversityNotifier() : super(UniversityState()) {
     fetchEvents();
     fetchNotifications();
   }
 
   Future<void> fetchEvents() async {
-    _isLoading = true;
-    notifyListeners();
+    state = state.copyWith(isLoading: true);
     try {
       final data = await _supabase.from('events').select().order('event_date', ascending: true);
-      _events = (data as List).map((e) => EventModel.fromJson(e)).toList();
+      final events = (data as List).map((e) => EventModel.fromJson(e)).toList();
+      state = state.copyWith(events: events, isLoading: false);
     } catch (e) {
-      debugPrint("Error fetching events: $e");
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      state = state.copyWith(isLoading: false);
     }
   }
 
   Future<void> fetchNotifications() async {
-    _isLoading = true;
-    notifyListeners();
     try {
       final data = await _supabase.from('notifications').select().order('created_at', ascending: false);
-      _notifications = (data as List).map((e) => NotificationModel.fromJson(e)).toList();
+      final notifications = (data as List).map((e) => NotificationModel.fromJson(e)).toList();
+      state = state.copyWith(notifications: notifications);
     } catch (e) {
-      debugPrint("Error fetching notifications: $e");
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      // Silently ignore
     }
   }
 
@@ -67,20 +82,5 @@ class UniversityProvider extends ChangeNotifier {
       'created_by': userId,
     });
     fetchNotifications();
-  }
-
-  Future<void> fetchContributionRequests() async {
-    try {
-      final data = await _supabase.from('contribution_requests').select();
-      _contributionRequests = (data as List).map((e) => ContributionRequestModel.fromJson(e)).toList();
-      notifyListeners();
-    } catch (e) {
-      debugPrint("Error fetching requests: $e");
-    }
-  }
-
-  Future<void> updateRequestStatus(String requestId, String status) async {
-    await _supabase.from('contribution_requests').update({'status': status}).eq('id', requestId);
-    fetchContributionRequests();
   }
 }

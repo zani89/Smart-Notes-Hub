@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/note_model.dart';
 import '../../../providers/notes_provider.dart';
 import '../screens/note_details_screen.dart';
 
-class NoteCard extends StatelessWidget {
+class NoteCard extends ConsumerWidget {
   final NoteModel note;
   final bool isTeacher;
   final VoidCallback? onApprove;
@@ -18,10 +18,9 @@ class NoteCard extends StatelessWidget {
     this.onReject,
   });
 
-  void _openNote(BuildContext context) async {
-    final provider = Provider.of<NotesProvider>(context, listen: false);
-    provider.addToRecents(note.id);
-    provider.incrementViewCount(note.id);
+  void _openNote(BuildContext context, WidgetRef ref) async {
+    ref.read(notesProvider.notifier).addToRecents(note.id);
+    ref.read(notesProvider.notifier).incrementViewCount(note.id);
 
     Navigator.push(
       context,
@@ -30,9 +29,9 @@ class NoteCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final provider = Provider.of<NotesProvider>(context);
-    final isFav = provider.isFavorite(note.id);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notesState = ref.watch(notesProvider);
+    final isFav = notesState.isFavorite(note.id);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -53,7 +52,7 @@ class NoteCard extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => _openNote(context),
+            onTap: () => _openNote(context, ref),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -94,7 +93,7 @@ class NoteCard extends StatelessWidget {
                           color: isFav ? const Color(0xFF00BFA5) : const Color(0xFF8B949E),
                           size: 20,
                         ),
-                        onPressed: () => provider.toggleFavorite(note.id),
+                        onPressed: () => ref.read(notesProvider.notifier).toggleFavorite(note.id),
                       ),
                     ],
                   ),
@@ -102,7 +101,15 @@ class NoteCard extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      _buildMetric('Author', note.authorName),
+                      _buildMetric('Semester', note.semester ?? 'N/A'),
                       _buildMetric('Views', note.viewCount.toString()),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                       _buildMetric('Status', note.status.toUpperCase(), color: _getStatusColor(note.status)),
                       _buildMetric('Tags', note.tags.isEmpty ? 'None' : '#${note.tags[0]}'),
                     ],

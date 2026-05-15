@@ -1,30 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/auth_provider.dart';
 
-class SignupScreen extends StatefulWidget {
+class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
 
   @override
-  State<SignupScreen> createState() => _SignupScreenState();
+  ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends State<SignupScreen> {
+class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _uniIdController = TextEditingController();
+  final _semesterController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String _selectedRole = 'student';
 
   void _signup() async {
     if (_formKey.currentState!.validate()) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       try {
-        await authProvider.signUp(
+        await ref.read(authProvider.notifier).signUp(
           _nameController.text.trim(),
           _emailController.text.trim(),
           _passwordController.text,
           _selectedRole,
+          _uniIdController.text.trim(),
+          _semesterController.text.trim(),
         );
         if (!mounted) return;
         Navigator.pop(context);
@@ -39,7 +42,7 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = Provider.of<AuthProvider>(context).isLoading;
+    final isLoading = ref.watch(authProvider).isLoading;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create Account')),
@@ -82,11 +85,31 @@ class _SignupScreenState extends State<SignupScreen> {
                   obscureText: true,
                   validator: (value) => value!.length < 6 ? 'Password must be at least 6 characters' : null,
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _uniIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'University ID',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.badge),
+                  ),
+                  validator: (value) => value!.isEmpty ? 'Enter your University ID' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _semesterController,
+                  decoration: const InputDecoration(
+                    labelText: 'Semester',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.school),
+                  ),
+                  validator: (value) => value!.isEmpty ? 'Enter your semester (e.g., Fall 2024)' : null,
+                ),
                 const SizedBox(height: 24),
                 const Text('Choose Your Role:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  initialValue: _selectedRole,
+                  value: _selectedRole,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   items: const [
                     DropdownMenuItem(value: 'student', child: Text('Student')),

@@ -1,23 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'core/constants/supabase_constants.dart';
-import 'core/theme/app_theme.dart';
-import 'providers/theme_provider.dart';
-import 'providers/auth_provider.dart';
-import 'providers/notes_provider.dart';
-import 'providers/university_provider.dart';
+import 'core/theme/theme_engine.dart';
 import 'ui/screens/auth/auth_wrapper.dart';
+import 'models/note_model.dart';
+import 'models/assignment_model.dart';
+import 'models/collaboration_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // Initialize Hive
   await Hive.initFlutter();
-  await Hive.openBox('notesBox'); // Box for offline caching
-  await Hive.openBox('prefsBox'); // Box for favorites and recents
+  Hive.registerAdapter(NoteModelAdapter());
+  Hive.registerAdapter(AssignmentModelAdapter());
+  Hive.registerAdapter(SubmissionModelAdapter());
+  Hive.registerAdapter(ContributionRequestModelAdapter());
   
+  await Hive.openBox<NoteModel>('notesBox');
+  await Hive.openBox<AssignmentModel>('assignmentsBox');
+
   // Initialize Supabase
   try {
     if (SupabaseConstants.supabaseUrl != 'YOUR_SUPABASE_URL') {
@@ -31,31 +35,24 @@ void main() async {
   }
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => NotesProvider()),
-        ChangeNotifierProvider(create: (_) => UniversityProvider()),
-      ],
-      child: const SmartNotesApp(),
+    const ProviderScope(
+      child: SmartNotesApp(),
     ),
   );
 }
 
-class SmartNotesApp extends StatelessWidget {
+class SmartNotesApp extends ConsumerWidget {
   const SmartNotesApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-
+  Widget build(BuildContext context, WidgetRef ref) {
+    // For now, defaulting to dark neon. Theme toggling will be added in Phase 2.
     return MaterialApp(
-      title: 'Smart Notes Hub',
+      title: 'ScholarSync',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeProvider.themeMode,
+      theme: NeonTheme.softLightTheme,
+      darkTheme: NeonTheme.darkNeonTheme,
+      themeMode: ThemeMode.dark,
       home: const AuthWrapper(),
     );
   }

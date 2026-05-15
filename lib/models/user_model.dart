@@ -2,15 +2,17 @@ class UserModel {
   final String id;
   final String name;
   final String email;
+  final String uniId;
   final String role;
-  final String? semester;
+  final String semester;
 
   UserModel({
     required this.id,
     required this.name,
     required this.email,
+    required this.uniId,
     required this.role,
-    this.semester,
+    required this.semester,
   });
 
   bool get isAdmin => role == 'admin';
@@ -22,8 +24,9 @@ class UserModel {
       id: json['id'],
       name: json['name'],
       email: json['email'],
+      uniId: json['uni_id'] ?? '',
       role: json['role'] ?? 'student',
-      semester: json['semester'],
+      semester: json['semester'] ?? '',
     );
   }
 
@@ -32,6 +35,7 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
+      'uni_id': uniId,
       'role': role,
       'semester': semester,
     };
