@@ -16,6 +16,14 @@ class ContributionRequestModel extends HiveObject {
   final String status; // 'pending', 'accepted', 'denied'
   @HiveField(5)
   final DateTime createdAt;
+  @HiveField(6)
+  final String? noteTitle;
+  @HiveField(7)
+  final String? noteCourse;
+  @HiveField(8)
+  final String? studentName;
+  @HiveField(9)
+  final String? handledByName;
 
   ContributionRequestModel({
     required this.id,
@@ -24,6 +32,10 @@ class ContributionRequestModel extends HiveObject {
     this.reason,
     required this.status,
     required this.createdAt,
+    this.noteTitle,
+    this.noteCourse,
+    this.studentName,
+    this.handledByName,
   });
 
   factory ContributionRequestModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +46,10 @@ class ContributionRequestModel extends HiveObject {
       reason: json['reason'],
       status: json['status'] ?? 'pending',
       createdAt: DateTime.parse(json['created_at']),
+      noteTitle: json['notes'] != null ? json['notes']['title'] : null,
+      noteCourse: json['notes'] != null ? json['notes']['course'] : null,
+      studentName: json['users'] != null ? json['users']['name'] : null,
+      handledByName: json['handled_by_user'] != null ? json['handled_by_user']['name'] : null,
     );
   }
 

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
@@ -50,15 +52,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _fetchProfile(String userId) async {
+    debugPrint("Fetching profile for user: $userId");
     try {
       final data = await _supabase.from('users').select().eq('id', userId).maybeSingle();
+      
       if (data != null) {
-        state = state.copyWith(user: UserModel.fromJson(data), isLoading: false);
+        debugPrint("Profile found: Name: ${data['name']}, Uni ID: ${data['uni_id']}");
+        state = state.copyWith(user: UserModel.fromJson(data), isLoading: false, error: null);
       } else {
-        // Fallback or self-healing
-        state = state.copyWith(isLoading: false);
+        debugPrint("Profile missing for $userId, attempting self-healing...");
+        final user = _supabase.auth.currentUser;
+        if (user != null) {
+          final newProfile = {
+            'id': user.id,
+            'email': user.email,
+            'name': user.userMetadata?['name'] ?? user.email?.split('@')[0] ?? 'User',
+            'semester': '1',
+            'role': 'student',
+          };
+          await _supabase.from('users').upsert(newProfile);
+          debugPrint("Self-healing successful for ${user.id}");
+          state = state.copyWith(user: UserModel.fromJson(newProfile), isLoading: false, error: null);
+        } else {
+          debugPrint("Self-healing failed: No current auth user");
+          state = state.copyWith(isLoading: false);
+        }
       }
     } catch (e) {
+      debugPrint("Error in _fetchProfile: $e");
       state = state.copyWith(error: e.toString(), isLoading: false);
     }
   }
@@ -73,29 +94,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> signUp(String name, String email, String password, String role, String uniId, String semester) async {
+  Future<void> signUp(String name, String? email, String password, String role, String? uniId, String semester) async {
+    if ((email == null || email.isEmpty) && (uniId == null || uniId.isEmpty)) {
+      throw Exception('Please provide either an Email or a University ID.');
+    }
+
     state = state.copyWith(isLoading: true);
     try {
+      // Use uni_id as placeholder email if email is missing
+      final registrationEmail = (email != null && email.isNotEmpty) 
+          ? email 
+          : '${uniId!.replaceAll(' ', '')}@smartnotes.internal';
+
       final AuthResponse res = await _supabase.auth.signUp(
-        email: email,
+        email: registrationEmail,
         password: password,
+        data: {'name': name},
       );
 
       final user = res.user;
       if (user != null) {
         try {
-          await _supabase.from('users').insert({
+          await _supabase.from('users').upsert({
             'id': user.id,
             'name': name,
-            'email': email,
-            'uni_id': uniId,
+            'email': (email != null && email.isNotEmpty) ? email : null,
+            'uni_id': (uniId != null && uniId.isNotEmpty) ? uniId : null,
             'role': role,
             'semester': semester,
           });
         } catch (insertError) {
-          // Attempt to clean up the auth user if profile creation fails
-          // (Requires admin privileges or a secure edge function usually, but we'll try)
-          // For now, throw a descriptive error.
           if (insertError is PostgrestException && insertError.code == '23505') {
              throw Exception('University ID or Email already exists.');
           }
@@ -109,13 +137,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       
       if (e is AuthException) {
         if (e.statusCode == '500' || e.message.contains('Database error saving new user')) {
-          friendlyError = 'Database Error (500): Check your Supabase database triggers or users table schema. Supabase failed to save the new user internally.';
+          friendlyError = 'Database Error (500): Check your Supabase database triggers or users table schema.';
         } else {
           friendlyError = e.message;
         }
       } else if (e is PostgrestException) {
         if (e.code == '23505') {
-          friendlyError = 'University ID already in use.';
+          friendlyError = 'University ID or Email already in use.';
         } else {
           friendlyError = e.message;
         }
@@ -125,6 +153,58 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       state = state.copyWith(error: friendlyError, isLoading: false);
       throw Exception(friendlyError);
+    }
+  }
+
+  Future<void> updateProfile({required String name, required String semester, String? email, String? uniId}) async {
+    final userId = state.user?.id;
+    if (userId == null) return;
+
+    debugPrint("Updating profile for user: $userId");
+    state = state.copyWith(isLoading: true);
+    try {
+      await _supabase.from('users').update({
+        'name': name,
+        'semester': semester,
+        'email': (email != null && email.isNotEmpty) ? email : null,
+        'uni_id': (uniId != null && uniId.isNotEmpty) ? uniId : null,
+      }).eq('id', userId);
+      
+      debugPrint("Update successful, refreshing profile...");
+      await _fetchProfile(userId);
+    } catch (e) {
+      debugPrint("Error in updateProfile: $e");
+      String friendlyError = e.toString();
+      if (e is PostgrestException && e.code == '23505') {
+        friendlyError = 'University ID or Email already in use by another student.';
+      }
+      state = state.copyWith(error: friendlyError, isLoading: false);
+      throw Exception(friendlyError);
+    }
+  }
+
+  Future<void> updateProfileImage(String path, Uint8List bytes) async {
+    final userId = state.user?.id;
+    if (userId == null) return;
+
+    state = state.copyWith(isLoading: true);
+    try {
+      // Upload to 'profile_images' bucket
+      await _supabase.storage.from('profile_images').uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(upsert: true),
+      );
+
+      final String imageUrl = _supabase.storage.from('profile_images').getPublicUrl(path);
+
+      // Update user table
+      await _supabase.from('users').update({'profile_image_url': imageUrl}).eq('id', userId);
+      
+      await _fetchProfile(userId);
+    } catch (e) {
+      state = state.copyWith(error: e.toString(), isLoading: false);
+      rethrow;
     }
   }
 

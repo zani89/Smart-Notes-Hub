@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/collaboration_provider.dart';
 import '../../widgets/note_card.dart';
+import 'collab_requests_screen.dart';
 
 class CollaboratoryScreen extends ConsumerWidget {
   const CollaboratoryScreen({super.key});
@@ -15,9 +16,27 @@ class CollaboratoryScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Collaboratory', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          const Text('Shared notes from peers', style: TextStyle(color: Colors.white54, fontSize: 16)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Collaboratory', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Shared notes from peers', style: TextStyle(color: Colors.white54, fontSize: 16)),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.history_edu_outlined, color: Color(0xFF00BFA5), size: 28),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CollabRequestsScreen()),
+                ),
+                tooltip: 'My Requests',
+              ),
+            ],
+          ),
           const SizedBox(height: 30),
           Expanded(
             child: collabState.isLoading

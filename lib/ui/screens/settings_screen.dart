@@ -16,9 +16,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authProvider);
     final themeMode = ref.watch(themeProvider);
-    final user = authState.user;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E11),

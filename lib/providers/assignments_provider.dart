@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/assignment_model.dart';
+import '../core/services/storage_service.dart';
 
 final assignmentsProvider = StateNotifierProvider<AssignmentsNotifier, AssignmentsState>((ref) {
   return AssignmentsNotifier();
@@ -91,12 +93,19 @@ class AssignmentsNotifier extends StateNotifier<AssignmentsState> {
     }
   }
 
-  Future<void> submitAssignment(String assignmentId, String fileUrl) async {
+  Future<void> uploadAndSubmit(String assignmentId, String fileName, Uint8List fileBytes) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
 
     state = state.copyWith(isLoading: true);
     try {
+      final path = '$assignmentId/${userId}_$fileName';
+      final fileUrl = await StorageService.uploadFile(
+        bucket: 'submissions',
+        path: path,
+        bytes: fileBytes,
+      );
+
       await _supabase.from('submissions').insert({
         'assignment_id': assignmentId,
         'student_id': userId,

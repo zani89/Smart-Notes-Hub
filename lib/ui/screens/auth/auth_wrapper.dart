@@ -14,14 +14,29 @@ class AuthWrapper extends ConsumerWidget {
     final authState = ref.watch(authProvider);
 
     if (authState.isLoading) {
-      return const Scaffold(
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Color(0xFF00BFA5)),
-              SizedBox(height: 24),
-              Text('Securing Connection...', style: TextStyle(color: Color(0xFF8B949E))),
+              const CircularProgressIndicator(color: Color(0xFF00BFA5)),
+              const SizedBox(height: 24),
+              const Text('Securing Connection...', style: TextStyle(color: Color(0xFF8B949E))),
+              if (authState.error != null) ...[
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    authState.error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => ref.read(authProvider.notifier).signOut(),
+                  child: const Text('Back to Login', style: TextStyle(color: Color(0xFF00BFA5))),
+                ),
+              ],
             ],
           ),
         ),

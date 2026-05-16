@@ -103,22 +103,35 @@ class AssignmentsScreen extends ConsumerWidget {
   }
 
   void _submitAssignment(BuildContext context, WidgetRef ref, String assignmentId) async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx'],
-    );
+    try {
+      FilePickerResult? result = await FilePicker.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: true,
+      );
 
-    if (result != null && result.files.single.path != null) {
-      // Mocking the upload process for the file
-      final mockFileUrl = 'https://mockstorage.com/submissions/${result.files.single.name}';
-      
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uploading submission...')));
+
+        if (file.bytes == null) throw Exception('File data missing');
+        await ref.read(assignmentsProvider.notifier).uploadAndSubmit(assignmentId, file.name, file.bytes!);
+
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Submitted successfully!'), backgroundColor: Color(0xFF00BFA5)),
+        );
+      } else {
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File selection cancelled.')));
+      }
+    } catch (e) {
       // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Uploading submission...')));
-      
-      await ref.read(assignmentsProvider.notifier).submitAssignment(assignmentId, mockFileUrl);
-      
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Submitted successfully!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.redAccent),
+      );
     }
   }
 }

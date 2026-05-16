@@ -19,22 +19,35 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   String _selectedRole = 'student';
 
   void _signup() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final uniId = _uniIdController.text.trim();
+    final password = _passwordController.text;
+    final semester = _semesterController.text.trim();
+
     if (_formKey.currentState!.validate()) {
+      if (email.isEmpty && uniId.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please provide either an Email or a University ID.')),
+        );
+        return;
+      }
+
       try {
         await ref.read(authProvider.notifier).signUp(
-          _nameController.text.trim(),
-          _emailController.text.trim(),
-          _passwordController.text,
+          name,
+          email.isEmpty ? null : email,
+          password,
           _selectedRole,
-          _uniIdController.text.trim(),
-          _semesterController.text.trim(),
+          uniId.isEmpty ? null : uniId,
+          semester,
         );
         if (!mounted) return;
         Navigator.pop(context);
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signup failed: ${e.toString()}')),
+          SnackBar(content: Text('Signup failed: ${e.toString().replaceAll('Exception: ', '')}')),
         );
       }
     }
@@ -67,12 +80,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 TextFormField(
                   controller: _emailController,
                   decoration: const InputDecoration(
-                    labelText: 'Email',
+                    labelText: 'Email (Optional)',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.email),
                   ),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (value) => value!.isEmpty ? 'Enter an email' : null,
+                  // Removed mandatory validator
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -89,11 +102,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 TextFormField(
                   controller: _uniIdController,
                   decoration: const InputDecoration(
-                    labelText: 'University ID',
+                    labelText: 'University ID (Optional)',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.badge),
                   ),
-                  validator: (value) => value!.isEmpty ? 'Enter your University ID' : null,
+                  // Removed mandatory validator
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -103,13 +116,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.school),
                   ),
-                  validator: (value) => value!.isEmpty ? 'Enter your semester (e.g., Fall 2024)' : null,
+                  validator: (value) => value!.isEmpty ? 'Enter your semester (e.g., 1, 2, ...)' : null,
                 ),
                 const SizedBox(height: 24),
                 const Text('Choose Your Role:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   items: const [
                     DropdownMenuItem(value: 'student', child: Text('Student')),

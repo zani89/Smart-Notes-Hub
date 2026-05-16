@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../providers/notes_provider.dart';
+import '../../../core/constants/course_constants.dart';
 
 class UploadNoteScreen extends ConsumerStatefulWidget {
   const UploadNoteScreen({super.key});
@@ -11,58 +13,53 @@ class UploadNoteScreen extends ConsumerStatefulWidget {
 
 class _UploadNoteScreenState extends ConsumerState<UploadNoteScreen> {
   final _titleController = TextEditingController();
-  final _descController = TextEditingController();
-  final _categoryController = TextEditingController();
-  final _semesterController = TextEditingController();
-  final _tagController = TextEditingController();
+  final _contentController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String _selectedSemester = '1';
+  String? _selectedCourse;
+  PlatformFile? _pickedFile;
 
-  final List<String> _tags = [];
-  bool _isShared = false;
-
-  void _addTag() {
-    if (_tagController.text.isNotEmpty) {
-      setState(() {
-        _tags.add(_tagController.text.trim());
-        _tagController.clear();
-      });
-    }
+  @override
+  void initState() {
+    super.initState();
+    _selectedCourse = semesterCourses[_selectedSemester]!.first;
   }
 
   void _upload() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        // On web, file picking and local paths are not supported the same way.
-        // We'll upload a dummy placeholder URL for now.
-        await ref.read(notesProvider.notifier).uploadNote(
-          title: _titleController.text,
-          description: _descController.text,
-          category: _categoryController.text,
-          tags: _tags,
-          isShared: _isShared,
-          semester: _semesterController.text.trim().isEmpty
-              ? null
-              : _semesterController.text.trim(),
-          filePath: '',
-          fileName: 'note_${DateTime.now().millisecondsSinceEpoch}.pdf',
-        );
-        if (!mounted) return;
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Note uploaded successfully!')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
-      }
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      await ref.read(notesProvider.notifier).uploadNote(
+        title: _titleController.text.trim(),
+        content: _contentController.text.trim(),
+        course: _selectedCourse!,
+        semester: _selectedSemester,
+        fileBytes: _pickedFile?.bytes,
+        fileName: _pickedFile?.name,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Note uploaded successfully!'),
+          backgroundColor: Color(0xFF00BFA5),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: ${e.toString().replaceAll("Exception: ", "")}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(notesProvider).isLoading;
+    final courses = semesterCourses[_selectedSemester] ?? [];
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0E11),
@@ -78,77 +75,103 @@ class _UploadNoteScreenState extends ConsumerState<UploadNoteScreen> {
             children: [
               TextFormField(
                 controller: _titleController,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Title',
                   prefixIcon: Icon(Icons.title),
                 ),
-                validator: (val) => val!.isEmpty ? 'Required' : null,
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'Title is required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _descController,
+                controller: _contentController,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
-                  labelText: 'Description',
+                  labelText: 'Content',
                   prefixIcon: Icon(Icons.description_outlined),
                 ),
-                maxLines: 3,
+                maxLines: 5,
+                validator: (val) => (val == null || val.trim().isEmpty) ? 'Content is required' : null,
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _categoryController,
+              DropdownButtonFormField<String>(
+                initialValue: _selectedSemester,
+                dropdownColor: const Color(0xFF30363D),
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
-                  labelText: 'Category (Math, Science, etc.)',
-                  prefixIcon: Icon(Icons.category_outlined),
+                  labelText: 'Semester',
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
                 ),
+                items: semesterCourses.keys
+                    .map((s) => DropdownMenuItem(value: s, child: Text('Semester $s')))
+                    .toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedSemester = val!;
+                    _selectedCourse = semesterCourses[_selectedSemester]!.first;
+                  });
+                },
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _semesterController,
+              DropdownButtonFormField<String>(
+                initialValue: _selectedCourse,
+                dropdownColor: const Color(0xFF30363D),
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
-                  labelText: 'Semester (e.g., 1, 2, Spring 2024)',
+                  labelText: 'Course',
                   prefixIcon: Icon(Icons.school_outlined),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _tagController,
-                      decoration: const InputDecoration(labelText: 'Add Tag'),
-                      onFieldSubmitted: (_) => _addTag(),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _addTag,
-                    icon: const Icon(Icons.add_circle, size: 32, color: Color(0xFF00BFA5)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: _tags
-                    .map((tag) => Chip(
-                          label: Text(tag),
-                          onDeleted: () => setState(() => _tags.remove(tag)),
-                        ))
+                items: courses
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                     .toList(),
+                onChanged: (val) => setState(() => _selectedCourse = val),
+                validator: (v) => v == null ? 'Course is required' : null,
               ),
-              const SizedBox(height: 16),
-              SwitchListTile(
-                title: const Text('Share with entire school?'),
-                subtitle: const Text('Makes the note visible in the Shared section once approved.'),
-                value: _isShared,
-                onChanged: (val) => setState(() => _isShared = val),
+              const SizedBox(height: 24),
+              InkWell(
+                onTap: () async {
+                  final result = await FilePicker.pickFiles(
+                    type: FileType.any, 
+                    allowMultiple: false,
+                    withData: true,
+                  );
+                  if (result != null) {
+                    setState(() => _pickedFile = result.files.first);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: const Color(0xFF00BFA5).withValues(alpha: 0.5)),
+                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF00BFA5).withValues(alpha: 0.05),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.attach_file, color: Color(0xFF00BFA5)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _pickedFile?.name ?? 'Attach File (PDF, Image, DOCX)',
+                          style: TextStyle(color: _pickedFile != null ? Colors.white : Colors.white54),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 40),
               isLoading
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFF00BFA5)))
                   : ElevatedButton(
                       onPressed: _upload,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00BFA5),
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
                       child: const Text('Upload Note',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
                     ),
             ],
           ),
@@ -157,3 +180,4 @@ class _UploadNoteScreenState extends ConsumerState<UploadNoteScreen> {
     );
   }
 }
+

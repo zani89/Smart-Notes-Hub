@@ -9,59 +9,49 @@ class NoteModel extends HiveObject {
   @HiveField(1)
   final String title;
   @HiveField(2)
-  final String? description;
+  final String content;
   @HiveField(3)
-  final String contentUrl;
+  final String uploaderId;
   @HiveField(4)
-  final String? category;
+  final String semester;
   @HiveField(5)
-  final List<String> tags;
+  final String course;
   @HiveField(6)
-  final bool isShared;
-  @HiveField(7)
-  final int viewCount;
-  @HiveField(8)
-  final String authorId;
-  @HiveField(9)
-  final String authorName;
-  @HiveField(10)
   final String status;
-  @HiveField(11)
-  final String? semester;
-  @HiveField(12)
+  @HiveField(7)
   final DateTime createdAt;
+  @HiveField(8)
+  final String uploaderName;
+  @HiveField(9)
+  final String? contentUrl;
 
   NoteModel({
     required this.id,
     required this.title,
-    this.description,
-    required this.contentUrl,
-    this.category,
-    this.tags = const [],
-    this.isShared = false,
-    this.viewCount = 0,
-    required this.authorId,
-    required this.authorName,
+    required this.content,
+    this.contentUrl,
+    required this.uploaderId,
+    required this.semester,
+    required this.course,
     required this.status,
-    this.semester,
     required this.createdAt,
+    this.uploaderName = 'Unknown',
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
-      id: json['id'],
-      title: json['title'],
-      description: json['description'],
-      contentUrl: json['content_url'] ?? '',
-      category: json['category'],
-      tags: List<String>.from(json['tags'] ?? []),
-      isShared: json['is_shared'] ?? false,
-      viewCount: json['view_count'] ?? 0,
-      authorId: json['author_id'],
-      authorName: json['users'] != null ? json['users']['name'] : 'Unknown Author',
+      id: json['id'] ?? '',
+      title: json['title'] ?? 'No Title',
+      content: json['content'] ?? '',
+      contentUrl: json['content_url'],
+      uploaderId: json['uploader_id'] ?? 'system',
+      semester: json['semester']?.toString() ?? '1',
+      course: json['course'] ?? 'General',
       status: json['status'] ?? 'pending',
-      semester: json['semester'],
-      createdAt: DateTime.parse(json['created_at']),
+      createdAt: json['created_at'] != null 
+          ? DateTime.parse(json['created_at']) 
+          : DateTime.now(),
+      uploaderName: json['uploader'] != null ? json['uploader']['name'] : 'Unknown',
     );
   }
 
@@ -69,16 +59,12 @@ class NoteModel extends HiveObject {
     return {
       'id': id,
       'title': title,
-      'description': description,
+      'content': content,
       'content_url': contentUrl,
-      'category': category,
-      'tags': tags,
-      'is_shared': isShared,
-      'view_count': viewCount,
-      'author_id': authorId,
-      'author_name': authorName,
-      'status': status,
+      'uploader_id': uploaderId,
       'semester': semester,
+      'course': course,
+      'status': status,
       'created_at': createdAt.toIso8601String(),
     };
   }

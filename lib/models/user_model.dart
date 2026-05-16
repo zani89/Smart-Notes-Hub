@@ -1,18 +1,20 @@
 class UserModel {
   final String id;
   final String name;
-  final String email;
-  final String uniId;
+  final String? email;
+  final String? uniId;
   final String role;
   final String semester;
+  final String? profileImageUrl;
 
   UserModel({
     required this.id,
     required this.name,
-    required this.email,
-    required this.uniId,
+    this.email,
+    this.uniId,
     required this.role,
     required this.semester,
+    this.profileImageUrl,
   });
 
   bool get isAdmin => role == 'admin';
@@ -21,12 +23,13 @@ class UserModel {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'],
-      name: json['name'],
+      id: json['id'] ?? '',
+      name: json['name'] ?? 'User',
       email: json['email'],
-      uniId: json['uni_id'] ?? '',
+      uniId: json['uni_id'],
       role: json['role'] ?? 'student',
-      semester: json['semester'] ?? '',
+      semester: json['semester'] ?? '1',
+      profileImageUrl: json['profile_image_url'],
     );
   }
 
@@ -38,6 +41,7 @@ class UserModel {
       'uni_id': uniId,
       'role': role,
       'semester': semester,
+      'profile_image_url': profileImageUrl,
     };
   }
 }

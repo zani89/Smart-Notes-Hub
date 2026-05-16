@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/collaboration_model.dart';
@@ -10,22 +11,26 @@ final collaborationProvider = StateNotifierProvider<CollaborationNotifier, Colla
 class CollaborationState {
   final List<NoteModel> sharedNotes;
   final List<ContributionRequestModel> requests;
+  final Set<String> acceptedNoteIds;
   final bool isLoading;
 
   CollaborationState({
     this.sharedNotes = const [],
     this.requests = const [],
+    this.acceptedNoteIds = const {},
     this.isLoading = false,
   });
 
   CollaborationState copyWith({
     List<NoteModel>? sharedNotes,
     List<ContributionRequestModel>? requests,
+    Set<String>? acceptedNoteIds,
     bool? isLoading,
   }) {
     return CollaborationState(
       sharedNotes: sharedNotes ?? this.sharedNotes,
       requests: requests ?? this.requests,
+      acceptedNoteIds: acceptedNoteIds ?? this.acceptedNoteIds,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -43,8 +48,8 @@ class CollaborationNotifier extends StateNotifier<CollaborationState> {
     state = state.copyWith(isLoading: true);
     try {
       final data = await _supabase.from('notes')
-          .select('*, users!notes_author_id_fkey(name)')
-          .eq('is_shared', true)
+          .select('*, users!notes_uploader_id_fkey(name)')
+          .inFilter('status', ['approved', 'requested_collab'])
           .order('created_at', ascending: false);
       final notes = (data as List<dynamic>).map((e) => NoteModel.fromJson(e)).toList();
       state = state.copyWith(sharedNotes: notes, isLoading: false);
@@ -59,13 +64,22 @@ class CollaborationNotifier extends StateNotifier<CollaborationState> {
 
     try {
       final data = await _supabase.from('contribution_requests')
-          .select()
+          .select('*, notes(title, course), handled_by_user:users!contribution_requests_handled_by_fkey(name)')
           .eq('student_id', userId)
           .order('created_at', ascending: false);
-      final reqs = (data as List<dynamic>).map((e) => ContributionRequestModel.fromJson(e)).toList();
-      state = state.copyWith(requests: reqs);
+      
+      final List<Map<String, dynamic>> list = List<Map<String, dynamic>>.from(data);
+      final reqs = list.map((e) => ContributionRequestModel.fromJson(e)).toList();
+      
+      // Track IDs of notes that the student is authorized to edit
+      final acceptedIds = reqs
+          .where((r) => r.status == 'accepted')
+          .map((r) => r.noteId)
+          .toSet();
+          
+      state = state.copyWith(requests: reqs, acceptedNoteIds: acceptedIds);
     } catch (e) {
-      // Ignore
+      debugPrint("Error fetching requests: $e");
     }
   }
 
@@ -81,6 +95,16 @@ class CollaborationNotifier extends StateNotifier<CollaborationState> {
         'reason': reason,
         'status': 'pending',
       });
+      await fetchRequests();
+    } finally {
+      state = state.copyWith(isLoading: false);
+    }
+  }
+
+  Future<void> updateRequestStatus(String requestId, String status) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      await _supabase.from('contribution_requests').update({'status': status}).eq('id', requestId);
       await fetchRequests();
     } finally {
       state = state.copyWith(isLoading: false);
